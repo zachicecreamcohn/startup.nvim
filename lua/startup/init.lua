@@ -11,6 +11,43 @@ M.config = {
 
 local draw
 
+-- One refresh timer per startup buffer, re-armed after every draw for the
+-- soonest time any widget says its output will change.
+local timers = {}
+
+local function schedule_refresh(buf, win)
+	local delay
+	for _, widget_opts in ipairs(M.config.widgets) do
+		local d = widgets.next_refresh(widget_opts)
+		if d and (not delay or d < delay) then
+			delay = d
+		end
+	end
+
+	local timer = timers[buf]
+	if not delay then
+		if timer then
+			timer:stop()
+		end
+		return
+	end
+	if not timer then
+		timer = vim.uv.new_timer()
+		timers[buf] = timer
+	end
+	timer:stop()
+	-- libuv measures delays from a cached loop time that can be stale; refresh it
+	-- so wall-clock-aligned refreshes don't fire early.
+	vim.uv.update_time()
+	timer:start(math.max(delay, 10), 0, function()
+		vim.schedule(function()
+			if vim.api.nvim_win_is_valid(win) and vim.api.nvim_win_get_buf(win) == buf then
+				draw(buf, win)
+			end
+		end)
+	end)
+end
+
 local function redraw_callback(buf, win)
 	return function()
 		vim.schedule(function()
@@ -39,6 +76,10 @@ function draw(buf, win)
 	vim.bo[buf].modifiable = true
 	c:flush(buf)
 	vim.bo[buf].modifiable = false
+	-- Timer-driven updates otherwise wait for the next UI event to reach the screen.
+	vim.cmd("redraw")
+
+	schedule_refresh(buf, win)
 end
 
 local function open()
@@ -60,6 +101,18 @@ local function open()
 		buffer = buf,
 		callback = redraw_callback(buf, win),
 	})
+
+	vim.api.nvim_create_autocmd("BufWipeout", {
+		buffer = buf,
+		callback = function()
+			local timer = timers[buf]
+			if timer then
+				timer:stop()
+				timer:close()
+				timers[buf] = nil
+			end
+		end,
+	})
 end
 
 function M.setup(opts)
@@ -69,6 +122,7 @@ function M.setup(opts)
 	vim.api.nvim_set_hl(0, "StartupTitle", { link = "Title", default = true })
 	vim.api.nvim_set_hl(0, "StartupLabel", { link = "Comment", default = true })
 	vim.api.nvim_set_hl(0, "StartupWeatherIcon", { link = "Special", default = true })
+	vim.api.nvim_set_hl(0, "StartupClock", { link = "Title", default = true })
 
 	vim.api.nvim_create_autocmd("VimEnter", {
 		group = vim.api.nvim_create_augroup("startup.nvim", { clear = true }),
