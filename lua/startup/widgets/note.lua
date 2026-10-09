@@ -20,7 +20,8 @@ local function wrap(text, width)
 end
 
 function M.render(opts, max_width)
-	local width = math.min(opts.width or 40, max_width)
+	local default_width = opts.full_width and max_width or 40
+	local width = math.min(opts.width or default_width, max_width)
 	return { lines = wrap(opts.text or "", width), hl = "StartupNote" }
 end
 

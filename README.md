@@ -15,7 +15,7 @@ opts = {
 		{
 			type = "note",
 			text = "I'll be right back.",
-			width = 40, -- optional
+			width = 40, -- optional: wrap width; defaults to 40, or the full width with full_width
 		},
 		{
 			type = "clock",
