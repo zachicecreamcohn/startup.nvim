@@ -76,8 +76,10 @@ local function line_width(chunks)
 	return w
 end
 
-local function content_row(chunks, inner, url)
-	local leftover = inner - line_width(chunks)
+-- Lays chunks out within content_width (where fills expand), offset by margin,
+-- then pads the row to the frame's full inner width.
+local function content_row(chunks, inner, content_width, margin, url)
+	local leftover = content_width - line_width(chunks)
 	local fills = 0
 	for _, chunk in ipairs(chunks) do
 		if chunk.fill then
@@ -87,7 +89,7 @@ local function content_row(chunks, inner, url)
 	local fill_index = 0
 	local cells = { "│" }
 	local hls = { { from = 1, to = 1, group = "StartupBorder" } }
-	for _ = 1, PAD_X do
+	for _ = 1, PAD_X + margin do
 		cells[#cells + 1] = " "
 	end
 	for _, chunk in ipairs(chunks) do
@@ -113,29 +115,40 @@ local function content_row(chunks, inner, url)
 end
 
 -- Wraps widget content in a padded, rounded border with an optional title.
--- min_width (optional) stretches the frame to at least that many columns overall.
-function M.frame(content, min_width)
+-- min_width / min_height (optional) stretch the frame to at least that many
+-- columns / lines overall. By default the extra space goes to the right of and
+-- below the content (fill chunks expand into the extra width); with `center`,
+-- the content block keeps its natural size and is centered in the frame.
+function M.frame(content, min_width, min_height, center)
 	local lines = {}
-	local inner = content.title and (width_of(content.title) + 4 - PAD_X * 2) or 0
-	if min_width then
-		inner = math.max(inner, min_width - M.CHROME_WIDTH)
-	end
+	local natural = content.title and (width_of(content.title) + 4 - PAD_X * 2) or 0
 	for i, line in ipairs(content.lines) do
 		lines[i] = to_chunks(line, content.hl)
-		inner = math.max(inner, line_width(lines[i]))
+		natural = math.max(natural, line_width(lines[i]))
 	end
+	local inner = math.max(natural, min_width and (min_width - M.CHROME_WIDTH) or 0)
 	local width = inner + PAD_X * 2 + 2
 
+	local content_width = center and natural or inner
+	local margin = center and math.floor((inner - natural) / 2) or 0
+	local extra = min_height and math.max(0, min_height - (#lines + PAD_Y * 2 + 2)) or 0
+	local extra_top = center and math.floor(extra / 2) or 0
+
+	local function blank()
+		return content_row({}, inner, inner, 0)
+	end
+
 	local rows = { border_row("╭", "─", "╮", width, content.title) }
-	for _ = 1, PAD_Y do
-		rows[#rows + 1] = content_row({}, inner)
+	for _ = 1, PAD_Y + extra_top do
+		rows[#rows + 1] = blank()
 	end
 	for i, chunks in ipairs(lines) do
 		local line = content.lines[i]
-		rows[#rows + 1] = content_row(chunks, inner, type(line) == "table" and line.url or nil)
+		local url = type(line) == "table" and line.url or nil
+		rows[#rows + 1] = content_row(chunks, inner, content_width, margin, url)
 	end
-	for _ = 1, PAD_Y do
-		rows[#rows + 1] = content_row({}, inner)
+	for _ = 1, PAD_Y + extra - extra_top do
+		rows[#rows + 1] = blank()
 	end
 	rows[#rows + 1] = border_row("╰", "─", "╯", width)
 

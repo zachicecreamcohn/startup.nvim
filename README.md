@@ -11,11 +11,16 @@ opts = {
 	widgets = {
 		-- every widget also takes (optional):
 		--   title = "..."        shown in the top border
+		--   width = 40           box width in columns (grows if content needs more)
+		--   height = 12          box height in lines (grows if content needs more)
 		--   full_width = true    span the whole max_width on its own row
+		--   fill_width = true    grow to take up the row's free space
+		--   fill_height = true   stretch to the height of the tallest widget in its row
+		--   dynamic_centering = true   keep content centered when the box is stretched
 		{
 			type = "note",
 			text = "I'll be right back.",
-			width = 40, -- optional: wrap width; defaults to 40, or the full width with full_width
+			text_width = 40, -- optional: wrap width; defaults to 40, or the box width with width/full_width
 		},
 		{
 			type = "clock",
@@ -43,7 +48,7 @@ opts = {
 			email = "me@example.com",
 			website = "example.com",
 			instagram = "handle",
-			width = 50, -- optional: bio wrap width; defaults to 50, or the full width with full_width
+			text_width = 50, -- optional: bio wrap width; defaults to 50, or the box width with width/full_width
 		},
 		{
 			type = "prs", -- PRs you authored or are reviewing, via the `gh` CLI; `yy` on a row copies its URL

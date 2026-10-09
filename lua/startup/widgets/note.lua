@@ -20,8 +20,9 @@ function M.wrap(text, width)
 end
 
 function M.render(opts, max_width)
-	local default_width = opts.full_width and max_width or 40
-	local width = math.min(opts.width or default_width, max_width)
+	-- When the box has a set or full width, max_width already reflects it.
+	local default_width = (opts.full_width or opts.width) and max_width or 40
+	local width = math.min(opts.text_width or default_width, max_width)
 	return { lines = M.wrap(opts.text or "", width), hl = "StartupNote" }
 end
 

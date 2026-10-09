@@ -72,16 +72,29 @@ function draw(buf)
 			request_redraw(buf)
 		end,
 	}
-	local boxes = {}
-	for _, widget_opts in ipairs(M.config.widgets) do
-		local content = widgets.render(widget_opts, wrap_width - canvas.CHROME_WIDTH, ctx)
+	local contents, boxes = {}, {}
+	for i, widget_opts in ipairs(M.config.widgets) do
+		-- width/height are minimums: content larger than them grows the box.
+		local box_width = widget_opts.width and math.min(widget_opts.width, wrap_width)
 		-- A box exactly wrap_width wide can't share a row, so layout gives it its own.
-		boxes[#boxes + 1] = canvas.frame(content, widget_opts.full_width and wrap_width or nil)
+		if widget_opts.full_width then
+			box_width = wrap_width
+		end
+		local budget = (box_width or wrap_width) - canvas.CHROME_WIDTH
+		contents[i] = widgets.render(widget_opts, budget, ctx)
+		boxes[i] = canvas.frame(contents[i], box_width, widget_opts.height, widget_opts.dynamic_centering)
+		boxes[i].fill_width = widget_opts.fill_width
+		boxes[i].fill_height = widget_opts.fill_height
 	end
 
 	local c = canvas.new(width, height)
 	for i, pos in ipairs(layout.flow(boxes, width, height, M.config.gap, wrap_width)) do
-		c:blit(boxes[i], pos.row, pos.col)
+		-- Layout only knows sizes after measuring every box, so stretched boxes are re-framed.
+		local box = boxes[i]
+		if pos.width ~= box.width or pos.height ~= box.height then
+			box = canvas.frame(contents[i], pos.width, pos.height, M.config.widgets[i].dynamic_centering)
+		end
+		c:blit(box, pos.row, pos.col)
 	end
 
 	vim.bo[buf].modifiable = true

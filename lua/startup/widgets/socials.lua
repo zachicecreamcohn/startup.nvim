@@ -47,6 +47,11 @@ local LINKS = {
 	},
 }
 
+local ROLE_ICON = {
+	subtitle = "\u{f0b1}", -- briefcase
+	company = "\u{f1ad}", -- building
+}
+
 local function centered(chunks)
 	local line = { { fill = true } }
 	vim.list_extend(line, chunks)
@@ -55,7 +60,8 @@ local function centered(chunks)
 end
 
 function M.render(opts, max_width)
-	local width = math.min(opts.width or (opts.full_width and max_width or 50), max_width)
+	local default_width = (opts.full_width or opts.width) and max_width or 50
+	local width = math.min(opts.text_width or default_width, max_width)
 	local lines = {}
 	local function blank()
 		if #lines > 0 then
@@ -66,13 +72,47 @@ function M.render(opts, max_width)
 	if opts.name then
 		lines[#lines + 1] = centered({ { opts.name, "StartupCardName" } })
 	end
-	local has_subtitle = opts.subtitle and opts.subtitle ~= ""
-	local has_company = opts.company and opts.company ~= ""
-	if has_subtitle or has_company then
-		local role = has_subtitle and has_company and (opts.subtitle .. " @ " .. opts.company)
-			or has_subtitle and opts.subtitle
-			or ("@ " .. opts.company)
-		lines[#lines + 1] = centered({ { role, "StartupLabel" } })
+	local function present(v)
+		return v ~= nil and v ~= ""
+	end
+
+	local role = {}
+	if present(opts.subtitle) then
+		role[#role + 1] = { icon = ROLE_ICON.subtitle, label = opts.subtitle }
+	end
+	if present(opts.company) then
+		role[#role + 1] = { icon = ROLE_ICON.company, label = opts.company }
+	end
+
+	local links = {}
+	for _, link in ipairs(LINKS) do
+		local value = opts[link.key]
+		if present(value) then
+			links[#links + 1] = { icon = link.icon, label = link.label(value), url = link.url(value) }
+		end
+	end
+
+	-- Role and link rows share one width so their icons line up in a single column,
+	-- and that block is centered as a whole.
+	local list_width = 0
+	for _, item in ipairs(vim.list_extend(vim.deepcopy(role), links)) do
+		list_width = math.max(list_width, vim.fn.strdisplaywidth(item.label) + 3)
+	end
+	local function add_list(items)
+		for _, item in ipairs(items) do
+			local pad = list_width - 3 - vim.fn.strdisplaywidth(item.label)
+			local line = centered({
+				{ item.icon, "StartupCardIcon" },
+				{ "  " .. item.label .. string.rep(" ", pad), not item.url and "StartupLabel" or nil },
+			})
+			line.url = item.url
+			lines[#lines + 1] = line
+		end
+	end
+
+	if #role > 0 then
+		blank()
+		add_list(role)
 	end
 
 	if opts.bio then
@@ -86,28 +126,9 @@ function M.render(opts, max_width)
 		end
 	end
 
-	-- Links are left-aligned among themselves (icons in one column) and the block is centered.
-	local links = {}
-	local links_width = 0
-	for _, link in ipairs(LINKS) do
-		local value = opts[link.key]
-		if value and value ~= "" then
-			local label = link.label(value)
-			links[#links + 1] = { icon = link.icon, label = label, url = link.url(value) }
-			links_width = math.max(links_width, vim.fn.strdisplaywidth(label) + 3)
-		end
-	end
 	if #links > 0 then
 		blank()
-		for _, link in ipairs(links) do
-			local pad = links_width - 3 - vim.fn.strdisplaywidth(link.label)
-			local line = centered({
-				{ link.icon, "StartupCardIcon" },
-				{ "  " .. link.label .. string.rep(" ", pad) },
-			})
-			line.url = link.url
-			lines[#lines + 1] = line
-		end
+		add_list(links)
 	end
 
 	if #lines == 0 then

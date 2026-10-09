@@ -55,20 +55,15 @@ function M.render(opts)
 	end
 
 	local digits = big(time)
-	local width = vim.fn.strdisplaywidth(digits[1])
-
-	local lines = {}
-	for _, row in ipairs(digits) do
-		lines[#lines + 1] = { { row, "StartupClock" } }
-	end
 
 	local date = opts.date_format and os.date(opts.date_format, now) or default_date(now)
 	if hour12 then
 		date = date .. "  ·  " .. os.date("%p", now)
 	end
-	width = math.max(width, vim.fn.strdisplaywidth(date))
-	for i, line in ipairs(lines) do
-		lines[i] = { { center(line[1][1], width), "StartupClock" } }
+	local width = math.max(vim.fn.strdisplaywidth(digits[1]), vim.fn.strdisplaywidth(date))
+	local lines = {}
+	for _, row in ipairs(digits) do
+		lines[#lines + 1] = { { center(row, width), "StartupClock" } }
 	end
 	lines[#lines + 1] = ""
 	lines[#lines + 1] = { { center(date, width), "StartupLabel" } }
