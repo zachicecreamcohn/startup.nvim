@@ -1,7 +1,7 @@
 -- Open PRs authored by you, via the `gh` CLI (must be installed and authenticated).
 local M = {}
 
-local FIELDS = "number,title,isDraft,mergeable,mergeStateStatus,reviewDecision,statusCheckRollup,updatedAt"
+local FIELDS = "number,title,url,isDraft,mergeable,mergeStateStatus,reviewDecision,statusCheckRollup,updatedAt"
 local REVIEW_FIELDS = FIELDS .. ",author,reviews,reviewRequests"
 
 -- Review requests disappear once you submit a review, so "PRs I'm reviewing" is
@@ -284,6 +284,7 @@ local function section(lines, heading, results, key, show_repo, active_within, r
 		if not result.error then
 			for _, pr in ipairs(prs) do
 				lines[#lines + 1] = { indent, unpack(row(pr)) }
+				lines[#lines].url = pr.url
 			end
 		end
 	end

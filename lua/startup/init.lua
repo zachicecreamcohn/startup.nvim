@@ -14,6 +14,8 @@ local draw
 -- One refresh timer per startup buffer, re-armed after every draw for the
 -- soonest time any widget says its output will change.
 local timers = {}
+-- Last drawn canvas per buffer, used to resolve what's under the cursor.
+local canvases = {}
 
 local function schedule_refresh(buf, win)
 	local delay
@@ -76,6 +78,7 @@ function draw(buf, win)
 	vim.bo[buf].modifiable = true
 	c:flush(buf)
 	vim.bo[buf].modifiable = false
+	canvases[buf] = c
 	-- Timer-driven updates otherwise wait for the next UI event to reach the screen.
 	vim.cmd("redraw")
 
@@ -97,6 +100,17 @@ local function open()
 
 	draw(buf, win)
 
+	vim.keymap.set("n", "yy", function()
+		local c = canvases[buf]
+		local url = c and c:url_at(vim.fn.line("."), vim.fn.virtcol("."))
+		if not url then
+			vim.cmd('normal! "' .. vim.v.register .. vim.v.count1 .. "yy")
+			return
+		end
+		vim.fn.setreg(vim.v.register, url)
+		vim.notify("Copied " .. url)
+	end, { buffer = buf, desc = "Copy URL under cursor" })
+
 	vim.api.nvim_create_autocmd("VimResized", {
 		buffer = buf,
 		callback = redraw_callback(buf, win),
@@ -105,6 +119,7 @@ local function open()
 	vim.api.nvim_create_autocmd("BufWipeout", {
 		buffer = buf,
 		callback = function()
+			canvases[buf] = nil
 			local timer = timers[buf]
 			if timer then
 				timer:stop()

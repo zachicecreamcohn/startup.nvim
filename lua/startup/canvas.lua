@@ -10,15 +10,16 @@ local function chars(s)
 end
 
 function M.new(width, height)
-	local cells, hls = {}, {}
+	local cells, hls, links = {}, {}, {}
 	for r = 1, height do
 		cells[r] = {}
 		hls[r] = {}
+		links[r] = {}
 		for c = 1, width do
 			cells[r][c] = " "
 		end
 	end
-	return setmetatable({ width = width, height = height, cells = cells, hls = hls }, Canvas)
+	return setmetatable({ width = width, height = height, cells = cells, hls = hls, links = links }, Canvas)
 end
 
 local PAD_X = 2
@@ -28,7 +29,8 @@ local function width_of(s)
 	return vim.fn.strdisplaywidth(s)
 end
 
--- A content line is either a plain string or a list of { text, hl? } chunks.
+-- A content line is either a plain string or a list of { text, hl? } chunks. A chunk
+-- list may also carry a `url` field, which `yy` copies when the cursor is on that row.
 local function to_chunks(line, default_hl)
 	if type(line) == "string" then
 		return { { line, default_hl } }
@@ -61,7 +63,7 @@ local function border_row(left, fill, right, width, title)
 	return { cells = cells, hls = hls }
 end
 
-local function content_row(chunks, inner)
+local function content_row(chunks, inner, url)
 	local cells = { "│" }
 	local hls = { { from = 1, to = 1, group = "StartupBorder" } }
 	for _ = 1, PAD_X do
@@ -79,7 +81,7 @@ local function content_row(chunks, inner)
 	end
 	cells[#cells + 1] = "│"
 	hls[#hls + 1] = { from = #cells, to = #cells, group = "StartupBorder" }
-	return { cells = cells, hls = hls }
+	return { cells = cells, hls = hls, url = url }
 end
 
 -- Wraps widget content in a padded, rounded border with an optional title.
@@ -100,8 +102,9 @@ function M.frame(content)
 	for _ = 1, PAD_Y do
 		rows[#rows + 1] = content_row({}, inner)
 	end
-	for _, chunks in ipairs(lines) do
-		rows[#rows + 1] = content_row(chunks, inner)
+	for i, chunks in ipairs(lines) do
+		local line = content.lines[i]
+		rows[#rows + 1] = content_row(chunks, inner, type(line) == "table" and line.url or nil)
 	end
 	for _ = 1, PAD_Y do
 		rows[#rows + 1] = content_row({}, inner)
@@ -123,6 +126,9 @@ function Canvas:blit(box, top, left)
 				self.cells[r][c] = ch
 			end
 		end
+		if row.url then
+			table.insert(self.links[r], { from = left + 1, to = left + #row.cells, url = row.url })
+		end
 		for _, hl in ipairs(row.hls) do
 			if left + hl.from <= self.width then
 				table.insert(self.hls[r], {
@@ -131,6 +137,15 @@ function Canvas:blit(box, top, left)
 					group = hl.group,
 				})
 			end
+		end
+	end
+end
+
+-- row and col are 1-based screen cells (col as from virtcol()).
+function Canvas:url_at(row, col)
+	for _, link in ipairs(self.links[row] or {}) do
+		if col >= link.from and col <= link.to then
+			return link.url
 		end
 	end
 end
