@@ -34,6 +34,18 @@ opts = {
 			type = "stats", -- lazy.nvim startup time and plugin counts
 		},
 		{
+			type = "socials", -- business card; every field optional, links copyable with yy
+			name = "Ada Lovelace",
+			subtitle = "Software Engineer",
+			company = "Analytical Engines",
+			bio = "Longer free-form text, word-wrapped.",
+			github = "username",
+			email = "me@example.com",
+			website = "example.com",
+			instagram = "handle",
+			width = 50, -- optional: bio wrap width; defaults to 50, or the full width with full_width
+		},
+		{
 			type = "prs", -- PRs you authored or are reviewing, via the `gh` CLI; `yy` on a row copies its URL
 			repos = { "owner/repo" },
 			refresh = 300, -- optional: seconds between refetches

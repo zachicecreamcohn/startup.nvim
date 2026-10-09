@@ -34,7 +34,8 @@ end
 -- A content line is either a plain string or a list of { text, hl? } chunks. A chunk
 -- list may also carry a `url` field, which `yy` copies when the cursor is on that row.
 -- A `{ fill = true }` chunk expands to the line's leftover width (like a flex spacer),
--- pushing later chunks to the right edge.
+-- pushing later chunks to the right edge. Multiple fills split it evenly, so
+-- `{ fill }, text, { fill }` centers text.
 local function to_chunks(line, default_hl)
 	if type(line) == "string" then
 		return { { line, default_hl } }
@@ -77,6 +78,13 @@ end
 
 local function content_row(chunks, inner, url)
 	local leftover = inner - line_width(chunks)
+	local fills = 0
+	for _, chunk in ipairs(chunks) do
+		if chunk.fill then
+			fills = fills + 1
+		end
+	end
+	local fill_index = 0
 	local cells = { "│" }
 	local hls = { { from = 1, to = 1, group = "StartupBorder" } }
 	for _ = 1, PAD_X do
@@ -85,10 +93,11 @@ local function content_row(chunks, inner, url)
 	for _, chunk in ipairs(chunks) do
 		local from = #cells + 1
 		if chunk.fill then
-			for _ = 1, leftover do
+			fill_index = fill_index + 1
+			local share = math.floor(leftover / fills) + (fill_index <= leftover % fills and 1 or 0)
+			for _ = 1, share do
 				cells[#cells + 1] = " "
 			end
-			leftover = 0
 		end
 		vim.list_extend(cells, chars(chunk[1]))
 		if chunk[2] and #cells >= from then
