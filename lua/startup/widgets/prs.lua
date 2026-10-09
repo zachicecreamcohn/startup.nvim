@@ -285,6 +285,13 @@ local function pr_line(row, widths, opts)
 end
 
 local function render_section(lines, heading, groups, show_repo, widths, opts)
+	-- Repos with nothing to show are hidden, and so is a section left empty.
+	groups = vim.tbl_filter(function(group)
+		return group.error or #group.rows > 0
+	end, groups)
+	if #groups == 0 then
+		return
+	end
 	if #lines > 0 then
 		lines[#lines + 1] = ""
 		lines[#lines + 1] = ""
@@ -300,8 +307,6 @@ local function render_section(lines, heading, groups, show_repo, widths, opts)
 		local indent = { string.rep(" ", INDENT) }
 		if group.error then
 			lines[#lines + 1] = { indent, { (group.error:gsub("\n.*", "")), "StartupError" } }
-		elseif #group.rows == 0 then
-			lines[#lines + 1] = { indent, { "None recently active", "StartupLabel" } }
 		end
 		for _, row in ipairs(group.rows) do
 			lines[#lines + 1] = pr_line(row, widths, opts)
@@ -338,6 +343,9 @@ local function format(opts, results, login, max_width)
 	local lines = {}
 	for _, s in ipairs(sections) do
 		render_section(lines, s.heading, s.groups, #results > 1, widths, opts)
+	end
+	if #lines == 0 then
+		lines[1] = { { "No recently active PRs", "StartupLabel" } }
 	end
 	return lines
 end
