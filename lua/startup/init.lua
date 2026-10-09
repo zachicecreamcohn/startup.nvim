@@ -1,51 +1,70 @@
+local layout = require("startup.layout")
+local canvas = require("startup.canvas")
+local widgets = require("startup.widgets")
+
 local M = {}
 
 M.config = {
-	text = "",
+	widgets = {},
+	gap = { x = 2, y = 1 },
 }
 
-local function render()
+local function draw(buf, win)
+	local width = vim.api.nvim_win_get_width(win)
+	local height = vim.api.nvim_win_get_height(win)
+
+	local boxes = {}
+	for _, widget_opts in ipairs(M.config.widgets) do
+		boxes[#boxes + 1] = canvas.frame(widgets.render(widget_opts, width - 4))
+	end
+
+	local c = canvas.new(width, height)
+	for i, pos in ipairs(layout.flow(boxes, width, height, M.config.gap)) do
+		c:blit(boxes[i], pos.row, pos.col)
+	end
+
+	vim.bo[buf].modifiable = true
+	c:flush(buf)
+	vim.bo[buf].modifiable = false
+end
+
+local function open()
 	vim.cmd("enew")
+	local buf = vim.api.nvim_get_current_buf()
+	local win = vim.api.nvim_get_current_win()
 	vim.opt_local.buftype = "nofile"
 	vim.opt_local.bufhidden = "wipe"
 	vim.opt_local.swapfile = false
 	vim.opt_local.number = false
 	vim.opt_local.relativenumber = false
 	vim.opt_local.signcolumn = "no"
-	vim.opt_local.modifiable = true
+	vim.opt_local.cursorline = false
+	vim.opt_local.list = false
 
-	local msg = M.config.text
-	local win_w = vim.api.nvim_win_get_width(0)
-	local win_h = vim.api.nvim_win_get_height(0)
-	local pad_x = math.floor((win_w - #msg) / 2)
-	local top = math.floor((win_h - 1) / 2)
-	local bottom = win_h - top - 1
+	draw(buf, win)
 
-	local lines = {}
-	for _ = 1, top do
-		lines[#lines + 1] = ""
-	end
-	lines[#lines + 1] = string.rep(" ", pad_x) .. msg
-	for _ = 1, bottom do
-		lines[#lines + 1] = ""
-	end
-
-	vim.api.nvim_buf_set_lines(0, 0, -1, false, lines)
-	local ns = vim.api.nvim_create_namespace("startup")
-	vim.api.nvim_set_hl(0, "StartupBold", { bold = true })
-	vim.api.nvim_buf_add_highlight(0, ns, "StartupBold", top, pad_x, pad_x + #msg)
-	vim.opt_local.modifiable = false
+	vim.api.nvim_create_autocmd("VimResized", {
+		buffer = buf,
+		callback = function()
+			if vim.api.nvim_win_is_valid(win) and vim.api.nvim_win_get_buf(win) == buf then
+				draw(buf, win)
+			end
+		end,
+	})
 end
 
 function M.setup(opts)
 	M.config = vim.tbl_deep_extend("force", M.config, opts or {})
+	vim.api.nvim_set_hl(0, "StartupBorder", { link = "FloatBorder", default = true })
+	vim.api.nvim_set_hl(0, "StartupNote", { bold = true, default = true })
+
 	vim.api.nvim_create_autocmd("VimEnter", {
 		group = vim.api.nvim_create_augroup("startup.nvim", { clear = true }),
 		callback = function()
 			if vim.fn.argc() > 0 then
 				return
 			end
-			render()
+			open()
 		end,
 	})
 end
