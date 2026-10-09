@@ -26,3 +26,19 @@ opts = {
 	},
 }
 ```
+
+## lazy.nvim
+
+```lua
+{
+	"zachicecreamcohn/startup.nvim",
+	lazy = false,
+	opts = {
+		widgets = {
+			{ type = "note", text = "I'll be right back." },
+			{ type = "clock", seconds = true },
+			{ type = "weather", location = "New York" },
+		},
+	},
+}
+```
