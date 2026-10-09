@@ -23,6 +23,17 @@ opts = {
 			longitude = -74.0, -- optional
 			units = "imperial", -- optional: "imperial" | "metric"
 		},
+		{
+			type = "stats", -- lazy.nvim startup time and plugin counts
+		},
+		{
+			type = "prs", -- PRs you authored or are reviewing, via the `gh` CLI
+			repos = { "owner/repo" },
+			refresh = 300, -- optional: seconds between refetches
+			active_within = 14, -- optional: days of activity to be listed; false for all
+			reviews = true, -- optional: include PRs you're requested on / have reviewed
+			title_width = 50, -- optional
+		},
 	},
 }
 ```

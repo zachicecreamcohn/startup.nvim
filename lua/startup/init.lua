@@ -123,6 +123,9 @@ function M.setup(opts)
 	vim.api.nvim_set_hl(0, "StartupLabel", { link = "Comment", default = true })
 	vim.api.nvim_set_hl(0, "StartupWeatherIcon", { link = "Special", default = true })
 	vim.api.nvim_set_hl(0, "StartupClock", { link = "Title", default = true })
+	vim.api.nvim_set_hl(0, "StartupOk", { link = "DiagnosticOk", default = true })
+	vim.api.nvim_set_hl(0, "StartupError", { link = "DiagnosticError", default = true })
+	vim.api.nvim_set_hl(0, "StartupPending", { link = "DiagnosticWarn", default = true })
 
 	vim.api.nvim_create_autocmd("VimEnter", {
 		group = vim.api.nvim_create_augroup("startup.nvim", { clear = true }),

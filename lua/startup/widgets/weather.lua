@@ -129,6 +129,7 @@ local function format(state)
 		return { { string.format("%-12s", label), "StartupLabel" }, { value } }
 	end
 	return {
+		{ { state.place or "", "StartupLabel" } },
 		{ { condition[1], "StartupWeatherIcon" }, { "  " .. temp(cur.temperature_2m), "StartupTitle" }, { "  " .. condition[2] } },
 		"",
 		row("Feels like", temp(cur.apparent_temperature)),
@@ -146,12 +147,12 @@ function M.render(opts, _, ctx)
 	end
 
 	if state.error then
-		return { title = "Weather", lines = { state.error }, hl = "ErrorMsg" }
+		return { lines = { "Weather: " .. state.error }, hl = "ErrorMsg" }
 	end
 	if not state.data then
-		return { title = opts.location or "Weather", lines = { "Loading…" }, hl = "StartupLabel" }
+		return { lines = { "Loading weather…" }, hl = "StartupLabel" }
 	end
-	return { title = state.place or "Weather", lines = format(state) }
+	return { lines = format(state) }
 end
 
 return M

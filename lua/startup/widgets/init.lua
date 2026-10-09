@@ -1,5 +1,5 @@
 -- A widget type is a module at startup.widgets.<type> exporting
--- render(opts, max_width, ctx) -> { lines = Line[], hl = string?, title = string? }
+-- render(opts, max_width, ctx) -> { lines = Line[], hl = string? }
 -- where Line is a string or a list of { text, hl? } chunks.
 -- Time-based widgets may also export next_refresh(opts) -> ms until their output changes.
 -- Async widgets render a placeholder and call ctx.redraw() once data arrives.
@@ -21,7 +21,7 @@ function M.render(opts, max_width, ctx)
 		return { lines = { "unknown widget type: " .. tostring(opts.type) }, hl = "ErrorMsg" }
 	end
 	local content = widget.render(opts, max_width, ctx)
-	content.title = opts.title or content.title
+	content.title = opts.title
 	return content
 end
 
