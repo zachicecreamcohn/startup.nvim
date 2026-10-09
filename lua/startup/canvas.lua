@@ -21,24 +21,94 @@ function M.new(width, height)
 	return setmetatable({ width = width, height = height, cells = cells, hls = hls }, Canvas)
 end
 
--- Wraps widget content in a rounded border, returning a box of rows of cells.
+local PAD_X = 2
+local PAD_Y = 1
+
+local function width_of(s)
+	return vim.fn.strdisplaywidth(s)
+end
+
+-- A content line is either a plain string or a list of { text, hl? } chunks.
+local function to_chunks(line, default_hl)
+	if type(line) == "string" then
+		return { { line, default_hl } }
+	end
+	local chunks = {}
+	for _, chunk in ipairs(line) do
+		chunks[#chunks + 1] = { chunk[1], chunk[2] or default_hl }
+	end
+	return chunks
+end
+
+local function border_row(left, fill, right, width, title)
+	local cells = { left }
+	local hls = {}
+	local col = 2
+	if title then
+		vim.list_extend(cells, chars("─ "))
+		local title_cells = chars(title)
+		vim.list_extend(cells, title_cells)
+		cells[#cells + 1] = " "
+		hls[#hls + 1] = { from = 1, to = 3, group = "StartupBorder" }
+		hls[#hls + 1] = { from = 4, to = 3 + #title_cells, group = "StartupTitle" }
+		col = #cells + 1
+	end
+	for _ = col, width - 1 do
+		cells[#cells + 1] = fill
+	end
+	cells[#cells + 1] = right
+	hls[#hls + 1] = { from = col, to = width, group = "StartupBorder" }
+	return { cells = cells, hls = hls }
+end
+
+local function content_row(chunks, inner)
+	local cells = { "│" }
+	local hls = { { from = 1, to = 1, group = "StartupBorder" } }
+	for _ = 1, PAD_X do
+		cells[#cells + 1] = " "
+	end
+	for _, chunk in ipairs(chunks) do
+		local from = #cells + 1
+		vim.list_extend(cells, chars(chunk[1]))
+		if chunk[2] and #cells >= from then
+			hls[#hls + 1] = { from = from, to = #cells, group = chunk[2] }
+		end
+	end
+	for _ = #cells, inner + PAD_X * 2 do
+		cells[#cells + 1] = " "
+	end
+	cells[#cells + 1] = "│"
+	hls[#hls + 1] = { from = #cells, to = #cells, group = "StartupBorder" }
+	return { cells = cells, hls = hls }
+end
+
+-- Wraps widget content in a padded, rounded border with an optional title.
 function M.frame(content)
-	local inner = 0
-	for _, line in ipairs(content.lines) do
-		inner = math.max(inner, vim.fn.strdisplaywidth(line))
+	local lines = {}
+	local inner = content.title and (width_of(content.title) + 4 - PAD_X * 2) or 0
+	for i, line in ipairs(content.lines) do
+		lines[i] = to_chunks(line, content.hl)
+		local w = 0
+		for _, chunk in ipairs(lines[i]) do
+			w = w + width_of(chunk[1])
+		end
+		inner = math.max(inner, w)
 	end
+	local width = inner + PAD_X * 2 + 2
 
-	local rows = { { cells = chars("╭" .. string.rep("─", inner + 2) .. "╮") } }
-	for _, line in ipairs(content.lines) do
-		local pad = string.rep(" ", inner - vim.fn.strdisplaywidth(line))
-		rows[#rows + 1] = {
-			cells = chars("│ " .. line .. pad .. " │"),
-			hl = content.hl and { from = 3, to = 2 + #chars(line), group = content.hl },
-		}
+	local rows = { border_row("╭", "─", "╮", width, content.title) }
+	for _ = 1, PAD_Y do
+		rows[#rows + 1] = content_row({}, inner)
 	end
-	rows[#rows + 1] = { cells = chars("╰" .. string.rep("─", inner + 2) .. "╯") }
+	for _, chunks in ipairs(lines) do
+		rows[#rows + 1] = content_row(chunks, inner)
+	end
+	for _ = 1, PAD_Y do
+		rows[#rows + 1] = content_row({}, inner)
+	end
+	rows[#rows + 1] = border_row("╰", "─", "╯", width)
 
-	return { rows = rows, width = inner + 4, height = #rows }
+	return { rows = rows, width = width, height = #rows }
 end
 
 function Canvas:blit(box, top, left)
@@ -53,14 +123,14 @@ function Canvas:blit(box, top, left)
 				self.cells[r][c] = ch
 			end
 		end
-		local border_end = math.min(left + #row.cells, self.width)
-		table.insert(self.hls[r], { from = left + 1, to = border_end, group = "StartupBorder" })
-		if row.hl then
-			table.insert(self.hls[r], {
-				from = left + row.hl.from,
-				to = math.min(left + row.hl.to, self.width),
-				group = row.hl.group,
-			})
+		for _, hl in ipairs(row.hls) do
+			if left + hl.from <= self.width then
+				table.insert(self.hls[r], {
+					from = left + hl.from,
+					to = math.min(left + hl.to, self.width),
+					group = hl.group,
+				})
+			end
 		end
 	end
 end

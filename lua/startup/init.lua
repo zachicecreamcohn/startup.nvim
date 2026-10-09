@@ -9,13 +9,26 @@ M.config = {
 	gap = { x = 2, y = 1 },
 }
 
-local function draw(buf, win)
+local draw
+
+local function redraw_callback(buf, win)
+	return function()
+		vim.schedule(function()
+			if vim.api.nvim_win_is_valid(win) and vim.api.nvim_win_get_buf(win) == buf then
+				draw(buf, win)
+			end
+		end)
+	end
+end
+
+function draw(buf, win)
 	local width = vim.api.nvim_win_get_width(win)
 	local height = vim.api.nvim_win_get_height(win)
 
+	local ctx = { redraw = redraw_callback(buf, win) }
 	local boxes = {}
 	for _, widget_opts in ipairs(M.config.widgets) do
-		boxes[#boxes + 1] = canvas.frame(widgets.render(widget_opts, width - 4))
+		boxes[#boxes + 1] = canvas.frame(widgets.render(widget_opts, width - 4, ctx))
 	end
 
 	local c = canvas.new(width, height)
@@ -45,11 +58,7 @@ local function open()
 
 	vim.api.nvim_create_autocmd("VimResized", {
 		buffer = buf,
-		callback = function()
-			if vim.api.nvim_win_is_valid(win) and vim.api.nvim_win_get_buf(win) == buf then
-				draw(buf, win)
-			end
-		end,
+		callback = redraw_callback(buf, win),
 	})
 end
 
@@ -57,6 +66,9 @@ function M.setup(opts)
 	M.config = vim.tbl_deep_extend("force", M.config, opts or {})
 	vim.api.nvim_set_hl(0, "StartupBorder", { link = "FloatBorder", default = true })
 	vim.api.nvim_set_hl(0, "StartupNote", { bold = true, default = true })
+	vim.api.nvim_set_hl(0, "StartupTitle", { link = "Title", default = true })
+	vim.api.nvim_set_hl(0, "StartupLabel", { link = "Comment", default = true })
+	vim.api.nvim_set_hl(0, "StartupWeatherIcon", { link = "Special", default = true })
 
 	vim.api.nvim_create_autocmd("VimEnter", {
 		group = vim.api.nvim_create_augroup("startup.nvim", { clear = true }),
