@@ -24,6 +24,8 @@ end
 
 local PAD_X = 2
 local PAD_Y = 1
+-- Columns a frame adds around its content: two borders plus horizontal padding.
+M.CHROME_WIDTH = PAD_X * 2 + 2
 
 local function width_of(s)
 	return vim.fn.strdisplaywidth(s)
@@ -31,13 +33,15 @@ end
 
 -- A content line is either a plain string or a list of { text, hl? } chunks. A chunk
 -- list may also carry a `url` field, which `yy` copies when the cursor is on that row.
+-- A `{ fill = true }` chunk expands to the line's leftover width (like a flex spacer),
+-- pushing later chunks to the right edge.
 local function to_chunks(line, default_hl)
 	if type(line) == "string" then
 		return { { line, default_hl } }
 	end
 	local chunks = {}
 	for _, chunk in ipairs(line) do
-		chunks[#chunks + 1] = { chunk[1], chunk[2] or default_hl }
+		chunks[#chunks + 1] = { chunk[1] or "", chunk[2] or default_hl, fill = chunk.fill }
 	end
 	return chunks
 end
@@ -63,7 +67,16 @@ local function border_row(left, fill, right, width, title)
 	return { cells = cells, hls = hls }
 end
 
+local function line_width(chunks)
+	local w = 0
+	for _, chunk in ipairs(chunks) do
+		w = w + width_of(chunk[1])
+	end
+	return w
+end
+
 local function content_row(chunks, inner, url)
+	local leftover = inner - line_width(chunks)
 	local cells = { "│" }
 	local hls = { { from = 1, to = 1, group = "StartupBorder" } }
 	for _ = 1, PAD_X do
@@ -71,6 +84,12 @@ local function content_row(chunks, inner, url)
 	end
 	for _, chunk in ipairs(chunks) do
 		local from = #cells + 1
+		if chunk.fill then
+			for _ = 1, leftover do
+				cells[#cells + 1] = " "
+			end
+			leftover = 0
+		end
 		vim.list_extend(cells, chars(chunk[1]))
 		if chunk[2] and #cells >= from then
 			hls[#hls + 1] = { from = from, to = #cells, group = chunk[2] }
@@ -85,16 +104,16 @@ local function content_row(chunks, inner, url)
 end
 
 -- Wraps widget content in a padded, rounded border with an optional title.
-function M.frame(content)
+-- min_width (optional) stretches the frame to at least that many columns overall.
+function M.frame(content, min_width)
 	local lines = {}
 	local inner = content.title and (width_of(content.title) + 4 - PAD_X * 2) or 0
+	if min_width then
+		inner = math.max(inner, min_width - M.CHROME_WIDTH)
+	end
 	for i, line in ipairs(content.lines) do
 		lines[i] = to_chunks(line, content.hl)
-		local w = 0
-		for _, chunk in ipairs(lines[i]) do
-			w = w + width_of(chunk[1])
-		end
-		inner = math.max(inner, w)
+		inner = math.max(inner, line_width(lines[i]))
 	end
 	local width = inner + PAD_X * 2 + 2
 

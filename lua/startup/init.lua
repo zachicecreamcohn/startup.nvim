@@ -7,6 +7,8 @@ local M = {}
 M.config = {
 	widgets = {},
 	gap = { x = 2, y = 1 },
+	-- Widgets wrap onto a new row past this many columns; nil means the window width.
+	max_width = nil,
 }
 
 local draw
@@ -17,7 +19,15 @@ local timers = {}
 -- Last drawn canvas per buffer, used to resolve what's under the cursor.
 local canvases = {}
 
-local function schedule_refresh(buf, win)
+local function request_redraw(buf)
+	vim.schedule(function()
+		if vim.api.nvim_buf_is_valid(buf) then
+			draw(buf)
+		end
+	end)
+end
+
+local function schedule_refresh(buf)
 	local delay
 	for _, widget_opts in ipairs(M.config.widgets) do
 		local d = widgets.next_refresh(widget_opts)
@@ -42,36 +52,35 @@ local function schedule_refresh(buf, win)
 	-- so wall-clock-aligned refreshes don't fire early.
 	vim.uv.update_time()
 	timer:start(math.max(delay, 10), 0, function()
-		vim.schedule(function()
-			if vim.api.nvim_win_is_valid(win) and vim.api.nvim_win_get_buf(win) == buf then
-				draw(buf, win)
-			end
-		end)
+		request_redraw(buf)
 	end)
 end
 
-local function redraw_callback(buf, win)
-	return function()
-		vim.schedule(function()
-			if vim.api.nvim_win_is_valid(win) and vim.api.nvim_win_get_buf(win) == buf then
-				draw(buf, win)
-			end
-		end)
+-- Sizes to whichever window currently shows the buffer, so it follows splits and
+-- the buffer being moved between windows.
+function draw(buf)
+	local win = vim.fn.bufwinid(buf)
+	if win == -1 then
+		return
 	end
-end
-
-function draw(buf, win)
 	local width = vim.api.nvim_win_get_width(win)
 	local height = vim.api.nvim_win_get_height(win)
 
-	local ctx = { redraw = redraw_callback(buf, win) }
+	local wrap_width = math.min(M.config.max_width or width, width)
+	local ctx = {
+		redraw = function()
+			request_redraw(buf)
+		end,
+	}
 	local boxes = {}
 	for _, widget_opts in ipairs(M.config.widgets) do
-		boxes[#boxes + 1] = canvas.frame(widgets.render(widget_opts, width - 4, ctx))
+		local content = widgets.render(widget_opts, wrap_width - canvas.CHROME_WIDTH, ctx)
+		-- A box exactly wrap_width wide can't share a row, so layout gives it its own.
+		boxes[#boxes + 1] = canvas.frame(content, widget_opts.full_width and wrap_width or nil)
 	end
 
 	local c = canvas.new(width, height)
-	for i, pos in ipairs(layout.flow(boxes, width, height, M.config.gap)) do
+	for i, pos in ipairs(layout.flow(boxes, width, height, M.config.gap, wrap_width)) do
 		c:blit(boxes[i], pos.row, pos.col)
 	end
 
@@ -82,13 +91,12 @@ function draw(buf, win)
 	-- Timer-driven updates otherwise wait for the next UI event to reach the screen.
 	vim.cmd("redraw")
 
-	schedule_refresh(buf, win)
+	schedule_refresh(buf)
 end
 
 local function open()
 	vim.cmd("enew")
 	local buf = vim.api.nvim_get_current_buf()
-	local win = vim.api.nvim_get_current_win()
 	vim.opt_local.buftype = "nofile"
 	vim.opt_local.bufhidden = "wipe"
 	vim.opt_local.swapfile = false
@@ -98,7 +106,7 @@ local function open()
 	vim.opt_local.cursorline = false
 	vim.opt_local.list = false
 
-	draw(buf, win)
+	draw(buf)
 
 	vim.keymap.set("n", "yy", function()
 		local c = canvases[buf]
@@ -111,14 +119,44 @@ local function open()
 		vim.notify("Copied " .. url)
 	end, { buffer = buf, desc = "Copy URL under cursor" })
 
+	-- Resize events aren't buffer-local, so listen globally and filter to our windows.
+	local group = vim.api.nvim_create_augroup("startup.nvim.buf" .. buf, { clear = true })
 	vim.api.nvim_create_autocmd("VimResized", {
+		group = group,
+		callback = function()
+			request_redraw(buf)
+		end,
+	})
+	-- draw() skips while the buffer isn't visible, so catch up when it reappears.
+	vim.api.nvim_create_autocmd("BufWinEnter", {
+		group = group,
 		buffer = buf,
-		callback = redraw_callback(buf, win),
+		callback = function()
+			request_redraw(buf)
+		end,
+	})
+	vim.api.nvim_create_autocmd("WinResized", {
+		group = group,
+		callback = function()
+			-- Other plugins may fire WinResized manually without v:event; redraw to be safe.
+			local windows = vim.v.event.windows
+			if not windows then
+				request_redraw(buf)
+				return
+			end
+			for _, w in ipairs(windows) do
+				if vim.api.nvim_win_is_valid(w) and vim.api.nvim_win_get_buf(w) == buf then
+					request_redraw(buf)
+					return
+				end
+			end
+		end,
 	})
 
 	vim.api.nvim_create_autocmd("BufWipeout", {
 		buffer = buf,
 		callback = function()
+			vim.api.nvim_del_augroup_by_id(group)
 			canvases[buf] = nil
 			local timer = timers[buf]
 			if timer then

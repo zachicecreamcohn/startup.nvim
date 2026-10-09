@@ -231,77 +231,113 @@ local function truncate(text, width)
 	return vim.fn.strcharpart(text, 0, width - 1) .. "…"
 end
 
-local function checks_chunk(pr)
-	local checks = summarize_checks(pr.statusCheckRollup)
-	return { pad(checks and checks.text or "–", 8), checks and CHECK_HL[checks.kind] or "StartupLabel" }
-end
-
+local INDENT = 2
+local NUMBER_WIDTH = 8 -- "#36733  "
+local CHECKS_WIDTH = 7
+local COLUMN_GAP = 2
 local AUTHOR_WIDTH = 16
 
-local function authored_row(pr, title_width)
-	local status, status_hl = merge_status(pr)
-	return {
-		{ string.format("#%-6d ", pr.number), "StartupLabel" },
-		{ truncate(pr.title, title_width) .. "  " },
-		checks_chunk(pr),
-		{ "  " },
-		{ status, status_hl },
-	}
+-- Rows are { pr, author?, status, status_hl } so column widths can be measured
+-- across every visible row before rendering.
+local function collect(results, key, active_within, status_of)
+	local groups = {}
+	for i, result in ipairs(results) do
+		local rows = {}
+		for _, pr in ipairs(result.error and {} or recent(result[key], active_within)) do
+			local status, status_hl = status_of(pr)
+			rows[#rows + 1] = { pr = pr, author = pr.author and ("@" .. pr.author.login), status = status, status_hl = status_hl }
+		end
+		groups[i] = { repo = result.repo, error = result.error, rows = rows }
+	end
+	return groups
 end
 
-local function reviewing_row(pr, title_width, login)
-	local status, status_hl = my_review_status(pr, login)
-	return {
-		{ string.format("#%-6d ", pr.number), "StartupLabel" },
-		{ truncate(pr.title, title_width) .. "  " },
-		{ truncate("@" .. pr.author.login, AUTHOR_WIDTH) .. "  ", "StartupLabel" },
-		checks_chunk(pr),
-		{ "  " },
-		{ status, status_hl },
+-- Left: number + title. Fill. Right: [author] checks status, so the right-hand
+-- columns line up against the box edge across both sections.
+local function pr_line(row, widths, opts)
+	local checks = summarize_checks(row.pr.statusCheckRollup)
+	-- Titles get whatever this row's right-hand columns leave, optionally capped.
+	local right = COLUMN_GAP + CHECKS_WIDTH + COLUMN_GAP + widths.status
+	if row.author then
+		right = right + COLUMN_GAP + widths.author
+	end
+	local title_width = math.max(10, widths.total - INDENT - NUMBER_WIDTH - right)
+	if opts.title_width then
+		title_width = math.min(title_width, opts.title_width)
+	end
+	local line = {
+		{ string.rep(" ", INDENT) },
+		{ pad("#" .. row.pr.number, NUMBER_WIDTH), "StartupLabel" },
+		{ (truncate(row.pr.title, title_width):gsub("%s+$", "")) },
+		{ fill = true },
 	}
+	if row.author then
+		line[#line + 1] = { string.rep(" ", COLUMN_GAP) .. pad(row.author, widths.author), "StartupLabel" }
+	end
+	line[#line + 1] = { string.rep(" ", COLUMN_GAP) }
+	line[#line + 1] = { pad(checks and checks.text or "–", CHECKS_WIDTH), checks and CHECK_HL[checks.kind] or "StartupLabel" }
+	line[#line + 1] = { string.rep(" ", COLUMN_GAP) }
+	local status_pad = widths.status - vim.fn.strdisplaywidth(row.status)
+	line[#line + 1] = { string.rep(" ", status_pad) }
+	line[#line + 1] = { row.status, row.status_hl }
+	line.url = row.pr.url
+	return line
 end
 
-local function section(lines, heading, results, key, show_repo, active_within, row)
+local function render_section(lines, heading, groups, show_repo, widths, opts)
 	if #lines > 0 then
 		lines[#lines + 1] = ""
 		lines[#lines + 1] = ""
 	end
 	lines[#lines + 1] = { { heading, "StartupTitle" } }
-	for i, result in ipairs(results) do
-		local prs = recent(result[key], active_within)
+	for i, group in ipairs(groups) do
 		if show_repo then
 			if i > 1 then
 				lines[#lines + 1] = ""
 			end
-			lines[#lines + 1] = { { result.repo, "StartupLabel" } }
+			lines[#lines + 1] = { { group.repo, "StartupLabel" } }
 		end
-		local indent = show_repo and { "  " } or { "" }
-		if result.error then
-			lines[#lines + 1] = { indent, { (result.error:gsub("\n.*", "")), "StartupError" } }
-		elseif #prs == 0 then
+		local indent = { string.rep(" ", INDENT) }
+		if group.error then
+			lines[#lines + 1] = { indent, { (group.error:gsub("\n.*", "")), "StartupError" } }
+		elseif #group.rows == 0 then
 			lines[#lines + 1] = { indent, { "None recently active", "StartupLabel" } }
 		end
-		if not result.error then
-			for _, pr in ipairs(prs) do
-				lines[#lines + 1] = { indent, unpack(row(pr)) }
-				lines[#lines].url = pr.url
-			end
+		for _, row in ipairs(group.rows) do
+			lines[#lines + 1] = pr_line(row, widths, opts)
 		end
 	end
 end
 
 local function format(opts, results, login, max_width)
-	local title_width = math.min(opts.title_width or 50, math.max(10, max_width - 65))
-	local show_repo = #results > 1
 	local active_within = opts.active_within == nil and 14 or opts.active_within or nil
-	local lines = {}
-	section(lines, "Authored", results, "authored", show_repo, active_within, function(pr)
-		return authored_row(pr, title_width)
-	end)
+	local sections = {
+		{ heading = "Authored", groups = collect(results, "authored", active_within, merge_status) },
+	}
 	if opts.reviews ~= false then
-		section(lines, "Reviewing", results, "reviewing", show_repo, active_within, function(pr)
-			return reviewing_row(pr, title_width, login)
-		end)
+		sections[#sections + 1] = {
+			heading = "Reviewing",
+			groups = collect(results, "reviewing", active_within, function(pr)
+				return my_review_status(pr, login)
+			end),
+		}
+	end
+
+	local widths = { status = 0, author = 0, total = max_width }
+	for _, s in ipairs(sections) do
+		for _, group in ipairs(s.groups) do
+			for _, row in ipairs(group.rows) do
+				widths.status = math.max(widths.status, vim.fn.strdisplaywidth(row.status))
+				if row.author then
+					widths.author = math.max(widths.author, math.min(vim.fn.strdisplaywidth(row.author), AUTHOR_WIDTH))
+				end
+			end
+		end
+	end
+
+	local lines = {}
+	for _, s in ipairs(sections) do
+		render_section(lines, s.heading, s.groups, #results > 1, widths, opts)
 	end
 	return lines
 end

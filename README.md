@@ -2,9 +2,16 @@
 
 ```lua
 opts = {
-	gap = { x = 2, y = 1 }, -- optional
+	-- optional, in columns/lines: x = minimum space between widgets (used for
+	-- wrapping), y = blank lines between rows
+	gap = { x = 2, y = 1 },
+	-- optional, in columns: rows wrap past this width and widgets are spread
+	-- across it (flexbox space-between); defaults to the window width
+	max_width = 120,
 	widgets = {
-		-- every widget also takes `title` (optional)
+		-- every widget also takes (optional):
+		--   title = "..."        shown in the top border
+		--   full_width = true    span the whole max_width on its own row
 		{
 			type = "note",
 			text = "I'll be right back.",
@@ -27,12 +34,12 @@ opts = {
 			type = "stats", -- lazy.nvim startup time and plugin counts
 		},
 		{
-			type = "prs", -- PRs you authored or are reviewing, via the `gh` CLI
+			type = "prs", -- PRs you authored or are reviewing, via the `gh` CLI; `yy` on a row copies its URL
 			repos = { "owner/repo" },
 			refresh = 300, -- optional: seconds between refetches
 			active_within = 14, -- optional: days of activity to be listed; false for all
 			reviews = true, -- optional: include PRs you're requested on / have reviewed
-			title_width = 50, -- optional
+			title_width = 50, -- optional: cap on title length; defaults to the available width
 		},
 	},
 }
