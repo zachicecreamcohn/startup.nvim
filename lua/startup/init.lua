@@ -9,6 +9,8 @@ M.config = {
 	gap = { x = 2, y = 1 },
 	-- Widgets wrap onto a new row past this many columns; nil means the window width.
 	max_width = nil,
+	-- A widget alone on its row stretches to the full max_width.
+	fill_lone_widgets = true,
 }
 
 local draw
@@ -88,7 +90,8 @@ function draw(buf)
 	end
 
 	local c = canvas.new(width, height)
-	for i, pos in ipairs(layout.flow(boxes, width, height, M.config.gap, wrap_width)) do
+	local positions = layout.flow(boxes, width, height, M.config.gap, wrap_width, M.config.fill_lone_widgets)
+	for i, pos in ipairs(positions) do
 		-- Layout only knows sizes after measuring every box, so stretched boxes are re-framed.
 		local box = boxes[i]
 		if pos.width ~= box.width or pos.height ~= box.height then

@@ -11,9 +11,10 @@ end
 --   * boxes with fill_width grow to absorb the row's free space (like flex-grow),
 --     leaving exactly gap.x between boxes;
 --   * otherwise boxes spread like flexbox space-between, and a lone box is centered.
--- Boxes with fill_height stretch to their row's tallest box.
+-- Boxes with fill_height stretch to their row's tallest box. With fill_lone, a
+-- box alone on its row always grows to wrap_width.
 -- Returns, per box, { row, col, width, height } with the box's final size.
-function M.flow(boxes, width, height, gap, wrap_width)
+function M.flow(boxes, width, height, gap, wrap_width, fill_lone)
 	wrap_width = math.min(wrap_width or width, width)
 	local rows = { { items = {}, width = 0, height = 0 } }
 	for i, box in ipairs(boxes) do
@@ -39,9 +40,12 @@ function M.flow(boxes, width, height, gap, wrap_width)
 	for _, row in ipairs(rows) do
 		local n = #row.items
 		local free = math.max(0, wrap_width - row.width)
+		local function grows(i)
+			return boxes[i].fill_width or (fill_lone and n == 1)
+		end
 		local growers = 0
 		for _, i in ipairs(row.items) do
-			if boxes[i].fill_width then
+			if grows(i) then
 				growers = growers + 1
 			end
 		end
@@ -60,7 +64,7 @@ function M.flow(boxes, width, height, gap, wrap_width)
 			local col, grower = container_left, 0
 			for _, i in ipairs(row.items) do
 				local w = boxes[i].width
-				if boxes[i].fill_width then
+				if grows(i) then
 					grower = grower + 1
 					w = w + share(free, growers, grower)
 				end

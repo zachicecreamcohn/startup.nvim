@@ -8,6 +8,7 @@ opts = {
 	-- optional, in columns: rows wrap past this width and widgets are spread
 	-- across it (flexbox space-between); defaults to the window width
 	max_width = 120,
+	fill_lone_widgets = true, -- optional: a widget alone on its row stretches to max_width
 	widgets = {
 		-- every widget also takes (optional):
 		--   title = "..."        shown in the top border
